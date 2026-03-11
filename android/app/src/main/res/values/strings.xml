@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Social Friction</string>
+    <string name="accessibility_service_description">Social Friction uses this permission to detect when a blocked app is opened and show a blocking screen to help you reduce screen time.</string>
+</resources>
