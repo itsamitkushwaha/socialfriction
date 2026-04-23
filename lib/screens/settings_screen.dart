@@ -179,10 +179,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: block.accessibilityEnabled
                     ? null
                     : () {
-                        const platform = MethodChannel(
-                            'com.example.social_friction/settings');
+                        const platform = MethodChannel('social_friction/blocker');
+                      try {
                         platform.invokeMethod('openAccessibilitySettings');
+                      } catch (e) {
+                        // Handle platform exception if needed
+                        debugPrint('Error opening accessibility settings: $e');
+                      }
                       },
+              ),
+              const Divider(color: AppTheme.cardBorder, height: 1),
+              _TappableTile(
+                icon: Icons.layers_rounded,
+                title: 'Display Over Other Apps',
+                subtitle: block.overlayPermissionGranted
+                    ? '✅ Granted — block overlay enabled'
+                    : '⚠️ Required to show the block screen',
+                trailing: block.overlayPermissionGranted
+                    ? const Icon(
+                        Icons.check_circle,
+                        color: AppTheme.success,
+                        size: 20,
+                      )
+                    : const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: AppTheme.textSecondary,
+                      ),
+                onTap: block.overlayPermissionGranted
+                    ? null
+                    : () => block.requestOverlayPermission(),
               ),
             ],
           ),

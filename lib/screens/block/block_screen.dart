@@ -29,7 +29,7 @@ class _BlockScreenState extends State<BlockScreen> {
   }
 
   Future<void> _loadApps() async {
-    final apps = await InstalledApps.getInstalledApps(true, true);
+    final apps = await InstalledApps.getInstalledApps(excludeSystemApps: true, withIcon: true);
     setState(() {
       _installedApps = apps;
       _filtered = _installedApps;
@@ -68,7 +68,10 @@ class _BlockScreenState extends State<BlockScreen> {
           return Column(
             children: [
               // Accessibility service warning
-              if (!block.accessibilityEnabled) _AccessibilityBanner(),
+              if (!block.accessibilityEnabled) const _AccessibilityBanner(),
+              // Overlay permission warning (only shown if accessibility is already granted)
+              if (block.accessibilityEnabled && !block.overlayPermissionGranted)
+                _OverlayPermissionBanner(onEnable: block.requestOverlayPermission),
               // Search bar
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -232,6 +235,8 @@ class _AppIcon extends StatelessWidget {
 }
 
 class _AccessibilityBanner extends StatelessWidget {
+  const _AccessibilityBanner();
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -258,13 +263,57 @@ class _AccessibilityBanner extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              const platform = MethodChannel('com.example.social_friction/settings');
+              const platform = MethodChannel('social_friction/blocker');
               platform.invokeMethod('openAccessibilitySettings');
             },
             child: const Text(
               'Enable',
               style: TextStyle(
                 color: AppTheme.accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OverlayPermissionBanner extends StatelessWidget {
+  final VoidCallback onEnable;
+  const _OverlayPermissionBanner({required this.onEnable});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.danger.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.danger.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.layers_rounded,
+            color: AppTheme.danger,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Grant "Display over other apps" permission to show the block overlay',
+              style: TextStyle(color: AppTheme.danger, fontSize: 13),
+            ),
+          ),
+          TextButton(
+            onPressed: onEnable,
+            child: const Text(
+              'Grant',
+              style: TextStyle(
+                color: AppTheme.danger,
                 fontWeight: FontWeight.w700,
               ),
             ),

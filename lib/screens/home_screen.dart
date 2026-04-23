@@ -5,6 +5,7 @@ import 'package:usage_stats/usage_stats.dart';
 import '../theme/app_theme.dart';
 import '../providers/usage_provider.dart';
 import '../models/app_usage.dart';
+import 'app_drawer.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,14 +15,33 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: const AppDrawer(),
       appBar: AppBar(
+        // Hamburger icon — opens the side drawer
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded, size: 26),
+          tooltip: 'Menu',
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
         title: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Image.asset('assets/logo.png', height: 32),
-            const SizedBox(width: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/logo.png',
+                width: 30,
+                height: 30,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 8),
             const Text('Social Friction'),
           ],
         ),
@@ -143,22 +163,24 @@ class _StreakCard extends StatelessWidget {
         children: [
           const Text('🔥', style: TextStyle(fontSize: 36)),
           const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$streak Day Streak',
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$streak Day Streak',
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const Text(
-                'Stay focused and break the habit!',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-              ),
-            ],
+                const Text(
+                  'Stay focused and break the habit!',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                ),
+              ],
+            ),
           ),
           const Spacer(),
           Container(
