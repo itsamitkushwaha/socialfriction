@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'providers/usage_provider.dart';
 import 'providers/block_provider.dart';
+import 'providers/auth_provider.dart';
 import 'services/notification_service.dart';
+import 'screens/auth/auth_checker.dart';
 import 'screens/home_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/block/block_screen.dart';
@@ -12,6 +16,11 @@ import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   await NotificationService.initialize();
   runApp(const SocialFrictionApp());
 }
@@ -23,6 +32,7 @@ class SocialFrictionApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => UsageProvider()..loadData()),
         ChangeNotifierProvider(create: (_) => BlockProvider()..loadData()),
       ],
@@ -30,7 +40,7 @@ class SocialFrictionApp extends StatelessWidget {
         title: 'Social Friction',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
-        home: const MainShell(),
+        home: const AuthChecker(),
       ),
     );
   }

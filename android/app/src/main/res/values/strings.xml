@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Social Friction</string>
     <string name="accessibility_service_description">Social Friction uses this permission to detect when a blocked app is opened and show a blocking screen to help you reduce screen time.</string>
+    <string name="default_web_client_id">461233756510-r8q6m5eh0jpuqavrjqhnp42g14dmpvof.apps.googleusercontent.com</string>
 </resources>

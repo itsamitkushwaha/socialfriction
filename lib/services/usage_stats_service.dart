@@ -24,21 +24,100 @@ class UsageStatsService {
 
   Future<List<AppUsage>> _getUsageForRange(DateTime start, DateTime end) async {
     try {
-      final stats = await UsageStats.queryUsageStats(start, end);
+      // Fetch raw events for the exact time range instead of aggregated stats.
+      // This allows us to handle screen off events (to prevent ghost time).
+      final events = await UsageStats.queryEvents(start, end);
 
+      final Map<String, int> packageUsageMs = {};
+      String? currentForegroundApp;
+      int? currentAppStartTime;
+      bool isScreenOn = true; // Assume screen is on initially, or at least that an app might be resumed
+
+      // Sort events chronologically to process the timeline
+      events.sort((a, b) {
+        final ta = int.tryParse(a.timeStamp ?? '0') ?? 0;
+        final tb = int.tryParse(b.timeStamp ?? '0') ?? 0;
+        return ta.compareTo(tb);
+      });
+
+      for (final event in events) {
+        final pkg = event.packageName;
+        final type = event.eventType;
+        final timestampStr = event.timeStamp;
+
+        if (type == null || timestampStr == null) continue;
+
+        final timestamp = int.tryParse(timestampStr);
+        if (timestamp == null) continue;
+
+        // eventType '1' = ACTIVITY_RESUMED
+        // eventType '2' = ACTIVITY_PAUSED
+        // eventType '15' = SCREEN_INTERACTIVE (Screen On)
+        // eventType '16' = SCREEN_NON_INTERACTIVE (Screen Off)
+
+        if (type == '15') {
+          isScreenOn = true;
+          // If there was an app technically in foreground, start its timer now that screen is on
+          if (currentForegroundApp != null) {
+            currentAppStartTime = timestamp;
+          }
+        } else if (type == '16') {
+          isScreenOn = false;
+          // Stop timer for current app because screen turned off
+          if (currentForegroundApp != null && currentAppStartTime != null) {
+            final durationMs = timestamp - currentAppStartTime;
+            if (durationMs > 0) {
+              packageUsageMs[currentForegroundApp] = (packageUsageMs[currentForegroundApp] ?? 0) + durationMs;
+            }
+            currentAppStartTime = null; // paused
+          }
+        } else if (type == '1' && pkg != null) {
+          // A new app came to foreground. If there's an existing app, stop its timer.
+          if (currentForegroundApp != null && currentForegroundApp != pkg && currentAppStartTime != null) {
+             final durationMs = timestamp - currentAppStartTime;
+             if (durationMs > 0) {
+                 packageUsageMs[currentForegroundApp] = (packageUsageMs[currentForegroundApp] ?? 0) + durationMs;
+             }
+          }
+          currentForegroundApp = pkg;
+          if (isScreenOn) {
+            currentAppStartTime = timestamp;
+          }
+        } else if (type == '2' && pkg != null) {
+          // App paused. If it's the current app, calculate time.
+          if (currentForegroundApp == pkg && currentAppStartTime != null) {
+            final durationMs = timestamp - currentAppStartTime;
+            if (durationMs > 0) {
+              packageUsageMs[pkg] = (packageUsageMs[pkg] ?? 0) + durationMs;
+            }
+            currentAppStartTime = null;
+            // Note: We don't unset currentForegroundApp because a short pause/resume cycle might happen natively,
+            // or the screen might just turn off right after this.
+          }
+        }
+      }
+
+      // Handle any app still in the foreground at the 'end' time
+      final endTimestamp = end.millisecondsSinceEpoch;
+      if (isScreenOn && currentForegroundApp != null && currentAppStartTime != null) {
+        final durationMs = endTimestamp - currentAppStartTime;
+        if (durationMs > 0) {
+          packageUsageMs[currentForegroundApp] = (packageUsageMs[currentForegroundApp] ?? 0) + durationMs;
+        }
+      }
 
       final List<AppUsage> result = [];
-      for (final stat in stats) {
-        final ms = int.tryParse(stat.totalTimeInForeground ?? '0') ?? 0;
-        if (ms > 0) {
+      packageUsageMs.forEach((packageName, ms) {
+        // Filter out very short flashes (< 1 sec) which are often system checks
+        if (ms > 1000) {
           result.add(AppUsage(
-            packageName: stat.packageName ?? '',
-            appName: stat.packageName ?? '',
+            packageName: packageName,
+            appName: packageName, 
             usageTimeMs: ms,
             date: start,
           ));
         }
-      }
+      });
 
       result.sort((a, b) => b.usageTimeMs.compareTo(a.usageTimeMs));
       return result;
@@ -56,11 +135,8 @@ class UsageStatsService {
   /// Checks if Usage Stats permission is granted
   Future<bool> isPermissionGranted() async {
     try {
-      await UsageStats.queryUsageStats(
-        DateTime.now().subtract(const Duration(minutes: 1)),
-        DateTime.now(),
-      );
-      return true;
+      final isGranted = await UsageStats.checkUsagePermission();
+      return isGranted ?? false;
     } catch (_) {
       return false;
     }

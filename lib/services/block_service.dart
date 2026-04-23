@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/block_rule.dart';
 
@@ -6,6 +7,8 @@ class BlockService {
   static const _rulesKey = 'block_rules';
   static const _keywordsKey = 'blocked_keywords';
   static const _pinKey = 'block_pin';
+
+  static const MethodChannel _channel = MethodChannel("social_friction/blocker");
 
   // ─── Block Rules ────────────────────────────────────────────────────────────
 
@@ -23,7 +26,7 @@ class BlockService {
       _rulesKey,
       rules.map((r) => jsonEncode(r.toJson())).toList(),
     );
-    await _syncToNative(rules);
+    await syncRules(rules);
   }
 
   Future<void> addRule(BlockRule rule) async {
@@ -50,52 +53,22 @@ class BlockService {
 
   Future<bool> isBlocked(String packageName) async {
     final rules = await getRules();
-    final rule = rules.where((r) => r.packageName == packageName && r.isEnabled).firstOrNull;
-    if (rule == null) return false;
+    return rules.any((r) => r.packageName == packageName && r.isEnabled);
+  }
 
-    switch (rule.blockType) {
-      case BlockType.permanent:
-        return true;
-      case BlockType.schedule:
-        return _isInSchedule(rule.scheduleStart, rule.scheduleEnd);
-      case BlockType.dailyLimit:
-      case BlockType.sessionLimit:
-        // Native service checks usage time vs limit
-        return false;
+  // ─── Native Sync ────────────────────────────────────────────────────────────
+
+  Future<void> syncRules(List<BlockRule> rules) async {
+    try {
+      final jsonRules = rules.map((r) => r.toJson()).toList();
+      await _channel.invokeMethod("updateRules", jsonRules);
+    } catch (_) {
     }
   }
 
-  bool _isInSchedule(String? start, String? end) {
-    if (start == null || end == null) return false;
-    final now = TimeOfDay.now();
-    final s = _parseTime(start);
-    final e = _parseTime(end);
-    if (s == null || e == null) return false;
-    final nowMins = now.hour * 60 + now.minute;
-    final sMins = s.hour * 60 + s.minute;
-    final eMins = e.hour * 60 + e.minute;
-    if (sMins <= eMins) {
-      return nowMins >= sMins && nowMins <= eMins;
-    } else {
-      // Overnight e.g. 22:00 – 07:00
-      return nowMins >= sMins || nowMins <= eMins;
-    }
-  }
-
-  TimeOfDay? _parseTime(String t) {
-    final parts = t.split(':');
-    if (parts.length != 2) return null;
-    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-  }
-
-  // Syncs block list to native SharedPreferences for Kotlin accessibility service
-  Future<void> _syncToNative(List<BlockRule> rules) async {
-    final prefs = await SharedPreferences.getInstance();
-    final blocked = rules
-        .where((r) => r.isEnabled && r.blockType == BlockType.permanent)
-        .map((r) => r.packageName)
-        .toList();
-    await prefs.setString('native_blocked_packages', jsonEncode(blocked));
+  Future<void> syncRulesToNative() async {
+    final rules = await getRules();
+    await syncRules(rules);
   }
 
   // ─── Keywords ───────────────────────────────────────────────────────────────
@@ -121,6 +94,11 @@ class BlockService {
     await prefs.setStringList(_keywordsKey, kws);
   }
 
+  Future<void> saveKeywords(List<String> keywords) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_keywordsKey, keywords);
+  }
+
   // ─── PIN ────────────────────────────────────────────────────────────────────
 
   Future<bool> hasPin() async {
@@ -143,22 +121,29 @@ class BlockService {
     await prefs.remove(_pinKey);
   }
 
+  Future<bool> isOverlayPermissionGranted() async {
+    try {
+      final granted = await _channel.invokeMethod<bool>('checkOverlayPermission');
+      return granted ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> requestOverlayPermission() async {
+    try {
+      await _channel.invokeMethod('requestOverlayPermission');
+    } catch (_) {}
+  }
+
   // ─── Accessibility Service ─────────────────────────────────────────────────
 
   Future<bool> isAccessibilityServiceEnabled() async {
-    // This is checked natively; we use a flag written by Kotlin
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('accessibility_service_enabled') ?? false;
-  }
-}
-
-class TimeOfDay {
-  final int hour;
-  final int minute;
-  const TimeOfDay({required this.hour, required this.minute});
-
-  static TimeOfDay now() {
-    final d = DateTime.now();
-    return TimeOfDay(hour: d.hour, minute: d.minute);
+    try {
+      final enabled = await _channel.invokeMethod<bool>('isAccessibilityServiceEnabled');
+      return enabled ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 }
